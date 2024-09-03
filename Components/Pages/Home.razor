@@ -1,0 +1,73 @@
+﻿@implements IDisposable
+@inject IJSRuntime JSRuntime
+@inject NamesCollection Names
+@page "/"
+
+<p class="mt-3 fs-3 fw-bold">
+    Change to send:
+    <input type="number" min="1" max=@Names.Count
+           @bind=@namesCount
+           @bind:after=@StreamNames />
+</p>
+<div class="row">
+    <div class="col">
+        <h3>Client messages</h3>
+        <ul @ref=@clientMessages></ul>
+    </div>
+    <div class="col">
+        <h3>Server messages</h3>
+        <ul>
+            @foreach (var msg in serverMessages)
+            {
+                <li>@msg</li>
+            }
+        </ul>
+    </div>
+</div>
+
+@code {
+    private Stack<string> serverMessages = [];
+    private int namesCount = 1000;
+    private ElementReference clientMessages;
+    private StreamingDataJsInterop streamingDataJsInterop = default!;
+
+    protected override void OnInitialized()
+    {
+        streamingDataJsInterop = new StreamingDataJsInterop(JSRuntime);
+    }
+
+    protected async override Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await StreamNames();
+            StateHasChanged();
+        }
+    }
+
+    public void Dispose()
+    {
+        streamingDataJsInterop.Dispose();
+    }
+
+    private async Task StreamNames()
+    {
+        var count = namesCount;
+        var data = Names.Take(count);
+        var stopwatch = Stopwatch.StartNew();
+
+        try
+        {
+            var receivedCount = await streamingDataJsInterop.InvokeStreamingAsync<int, IEnumerable<string>>(
+                "receiveNamesList",
+                data,
+                clientMessages);
+
+            serverMessages.Push($"Sent {count} names to client in {stopwatch.Elapsed}. Client received {receivedCount}.");
+        }
+        catch (OperationCanceledException)
+        {
+            serverMessages.Push($"Aborted sending {count} names to client after {stopwatch.Elapsed}.");
+        }
+    }
+}
