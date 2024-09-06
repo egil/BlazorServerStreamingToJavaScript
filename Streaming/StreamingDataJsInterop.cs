@@ -89,9 +89,17 @@ public sealed partial class StreamingDataJsInterop : IDisposable
                 RegisterAbortJsCallback();
             }
 
-            // We have to use Task.Run, otherwise
-            // the task is started on Blazor dispatcher and will
-            // block it until the task completes.
+            // If we do not use Task.Run, the full send to the client still
+            // completes, even though the task is cancelled correctly.
+            // However, if we initiate streaming on a separate thread,
+            // the task is cancelled correctly and the client does not receive
+            // the data.
+            //
+            // I.e. replacing this call with:
+            //
+            // var result = InitiateStreamingAsync<TResult, TStreamData>(identifier, data, cancellationTokenSource.Token, args),
+            //
+            // will result in the client receiving the data even though the task is cancelled.
             var result = Task.Run(
                 () => InitiateStreamingAsync<TResult, TStreamData>(identifier, data, cancellationTokenSource.Token, args),
                 cancellationTokenSource.Token);
